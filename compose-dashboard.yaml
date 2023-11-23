@@ -1,0 +1,17 @@
+services:
+
+  dashboard:
+    build: streamlit
+    restart: unless-stopped
+    container_name: dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - pinot-controller
+    volumes:
+      - ./dashboards/app.py:/workdir/app.py
+    environment:
+      - PINOT_SERVER
+      - PINOT_PORT
+    networks:
+      - rta
