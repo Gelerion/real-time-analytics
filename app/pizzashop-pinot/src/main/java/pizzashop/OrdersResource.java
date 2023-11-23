@@ -11,8 +11,12 @@ import org.apache.pinot.client.ResultSetGroup;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 import pizzashop.models.OrdersSummary;
+import pizzashop.models.SummaryRow;
 import pizzashop.models.TimePeriod;
 
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.jooq.impl.DSL.*;
 
@@ -66,7 +70,41 @@ public class OrdersResource {
         return Response.ok(ordersSummary).build();
     }
 
+    @GET
+    @Path("/ordersPerMinute")
+    public Response ordersPerMinute() {
+        String query = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("ToDateTime(DATETRUNC('MINUTE', ts), 'yyyy-MM-dd HH:mm:ss')")
+                                .as("dateMin"),
+                        count(field("*")),
+                        sum(field("price").coerce(Long.class))
+                )
+                .from("orders")
+                .groupBy(field("dateMin"))
+                .orderBy(field("dateMin"))
+                .$where(field("dateMin").greaterThan(field("ago('PT1H')")))
+                .$limit(DSL.inline(60))
+                .getSQL();
+
+        ResultSet summaryResults = runQuery(connection, query);
+
+        int rowCount = summaryResults.getRowCount();
+
+        List<SummaryRow> rows = new ArrayList<>();
+        for (int index = 0; index < rowCount; index++) {
+            rows.add(new SummaryRow(
+                    summaryResults.getString(index, 0),
+                    summaryResults.getLong(index, 1),
+                    summaryResults.getDouble(index, 2)
+            ));
+        }
+
+        return Response.ok(rows).build();
+    }
+
     private static ResultSet runQuery(Connection connection, String query) {
+        System.out.println("Running the following query: " + query);
         ResultSetGroup resultSetGroup = connection.execute(query);
         return resultSetGroup.getResultSet(0);
     }

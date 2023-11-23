@@ -22,6 +22,8 @@ The following are some potential applications that we could build to solve vario
 - Machine-based/internal: An anomaly detection system on access logs that sends alerts via Slack or email when unusual traffic patterns are detected. This will allow site reliability engineering (SRE) team to make sure the website is highly available and to detect denial-of-service attacks.
 - Machine-based/external: A fraud detection system that detects and blocks fraudulent orders.
 
+![Screenshot](images/rta_quadrants.png)
+
 # Running locally
 Once Docker Compose is installed, you can start everything by running the following command:
 ```sh
@@ -94,7 +96,7 @@ cd app/pizzashop && ./mvnw compile quarkus:dev
 ```
 
 #### Querying in counts in real-time from kafka-store
-```http
+```
 localhost:8080/orders/overview
 ```
 Example output:
@@ -160,7 +162,7 @@ cd app/pizzashop-pinot && ./mvnw compile quarkus:dev
 ```
   
 #### Querying in counts in real-time from Apache Presto
-```http
+```
 localhost:8080/orders/overview
 ```
 Example output:
@@ -177,3 +179,36 @@ Example output:
   }
 }
 ```
+
+## Building a Real-Time Analytics Dashboard
+The current architecture includes the [Order Service](https://www.notion.so/gelerion/orders-service), which simulates 
+users generating order events. These order events are produced to the Kafka topic named `orders`, consumed in real 
+time by Pinot, and ingested into the [orders](https://www.notion.so/gelerion/docker/pinot/config/orders/table.json) 
+table. We use a small rest service, [pizzashop](https://www.notion.so/gelerion/app/pizzashop-pinot), to query the data from Pinot.
+  
+We are going to build a [dashboards](https://www.notion.so/gelerion/dashboards) service for data visualization, 
+using the Streamlit framework.  
+
+![Screenshot](images/rta_dashbords_architecture.png)
+  
+### Running locally:
+```sh
+docker compose -f compose.yaml -f compose-pinot.yaml down --volumes
+docker compose -f compose.yaml -f compose-pinot.yaml up
+cd app/pizzashop-pinot
+sdk use java 17.0.8-amzn 
+./mvnw compile quarkus:dev
+cd ..
+cd ..
+cd dashboards
+docker build --tag streamlit .
+docker run -p 8501:8501 streamlit
+```
+### Dashboards
+Dashboards are managed by the [dashboards](https://www.notion.so/gelerion/dashboards) service.
+  
+![Screenshot](images/basic_dashboard.png)
+  
+Links:
+- Pinot UI: http://localhost:9000
+- Dashboards UI: http://localhost:8501

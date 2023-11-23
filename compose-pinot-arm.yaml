@@ -1,7 +1,7 @@
 services:
 
   pinot-controller:
-    image: apachepinot/pinot:0.10.0
+    image: apachepinot/pinot:0.11.0-arm64
     command: "StartController -zkAddress zookeeper:2181"
     container_name: "pinot-controller"
     restart: unless-stopped
@@ -13,7 +13,7 @@ services:
       - rta
 
   pinot-broker:
-    image: apachepinot/pinot:0.10.0
+    image: apachepinot/pinot:0.11.0-arm64
     command: "StartBroker -zkAddress zookeeper:2181"
     restart: unless-stopped
     container_name: "pinot-broker"
@@ -25,7 +25,7 @@ services:
       - rta
 
   pinot-server:
-    image: apachepinot/pinot:0.10.0
+    image: apachepinot/pinot:0.11.0-arm64
     container_name: "pinot-server"
     command: "StartServer -zkAddress zookeeper:2181"
     restart: unless-stopped
@@ -34,13 +34,26 @@ services:
     networks:
       - rta
 
-# Business Logic
   pinot-add-table-orders:
-    image: apachepinot/pinot:0.10.0
+    image: apachepinot/pinot:0.11.0-arm64
     container_name: "pinot-add-table"
     volumes:
-      - ./docker/pinot/config:/config
+      - ./pinot/config:/config
     command: "AddTable -schemaFile /config/orders/schema.json -tableConfigFile /config/orders/table.json -controllerHost pinot-controller -exec"
+    restart: on-failure
+    environment:
+      - "JAVA_OPTS=-Dpinot.admin.system.exit=true"
+    depends_on:
+      - pinot-controller
+    networks:
+      - rta
+
+  pinot-add-table-order-items-enriched:
+    image: apachepinot/pinot:0.11.0-arm64
+    container_name: "pinot-add-table-order-items-enriched"
+    volumes:
+      - ./pinot/config:/config
+    command: "AddTable -schemaFile /config/order_items_enriched/schema.json -tableConfigFile /config/order_items_enriched/table.json -controllerHost pinot-controller -exec"
     restart: on-failure
     environment:
       - "JAVA_OPTS=-Dpinot.admin.system.exit=true"
