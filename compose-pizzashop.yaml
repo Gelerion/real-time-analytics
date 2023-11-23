@@ -1,0 +1,18 @@
+services:
+
+  pizzashop:
+    image: quarkus/pizzashop-jvm
+    build:
+      context: ./app/pizzashop-jvm/src/main/docker/
+      dockerfile: Dockerfile.jvm
+    restart: unless-stopped
+    container_name: pizzashop
+    hostname: pizzashop
+    ports:
+      - "8080:8080"
+    depends_on:
+      - pinot-controller
+    environment:
+      - PINOT_BROKER=pinot-broker:8099
+    networks:
+      - rta

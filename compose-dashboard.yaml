@@ -1,7 +1,7 @@
 services:
 
   dashboard:
-    build: streamlit
+    build: dashboards
     restart: unless-stopped
     container_name: dashboard
     ports:
@@ -13,5 +13,6 @@ services:
     environment:
       - PINOT_SERVER
       - PINOT_PORT
+      - PIZZASHOP_SERVICE=pizzashop:8080
     networks:
       - rta

@@ -5,12 +5,14 @@ from datetime import datetime
 import plotly.graph_objects as go
 # import plotly.express as px
 import requests
-# import os
+import os
 # from pinotdb import connect
 
 # pinot_host=os.environ.get("PINOT_SERVER", "pinot-broker")
 # pinot_port=os.environ.get("PINOT_PORT", 8099)
 # conn = connect(pinot_host, pinot_port)
+
+pizzashop_host_port=os.environ.get("PIZZASHOP_SERVICE", "host.docker.internal:8080")
 
 st.set_page_config(layout="wide")
 st.header("Pizza App Dashboard")
@@ -21,7 +23,7 @@ dt_string = now.strftime("%d %B %Y %H:%M:%S")
 st.write(f"Last update: {dt_string}")
 
 if not "sleep_time" in st.session_state:
-    st.session_state.sleep_time = 2
+    st.session_state.sleep_time = 30
 
 if not "auto_refresh" in st.session_state:
     st.session_state.auto_refresh = True
@@ -32,7 +34,7 @@ if auto_refresh:
     number = st.number_input('Refresh rate in seconds', value=st.session_state.sleep_time)
     st.session_state.sleep_time = number
 
-pizza_shop_service_api = "http://host.docker.internal:8080" # pizza shop service
+pizza_shop_service_api = f'http://{pizzashop_host_port}' # pizza shop service
 
 # {
 #     "totalOrders": 17283,

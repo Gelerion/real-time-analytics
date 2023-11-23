@@ -192,6 +192,70 @@ using the Streamlit framework.
 ![Screenshot](images/rta_dashbords_architecture.png)
   
 ### Running locally:
+Remove volumes
+```sh
+docker compose -f compose.yaml \
+      -f compose-pinot-arm.yaml \
+      -f compose-pizzashop.yaml \
+      -f compose-dashboard.yaml \
+      down --volumes
+```
+
+Run:
+```sh
+docker compose -f compose.yaml \
+      -f compose-pinot-arm.yaml \
+      -f compose-pizzashop.yaml \
+      -f compose-dashboard.yaml \
+      up
+```
+### Dashboards
+Dashboards are managed by the [dashboards](https://www.notion.so/gelerion/dashboards) service.
+  
+![Screenshot](images/basic_dashboard.png)
+  
+Links:
+- Pinot UI: http://localhost:9000
+- Dashboards UI: http://localhost:8501
+
+## Services
+- [Order Service](orders-service)
+  - Simulates a pizza order service that receives orders from customers and sends them to the `orders` topic for processing
+- [Pizza Shop](app/pizzashop-pinot)
+  - Queries the `orders` table and exposes an HTTP endpoint for querying the data
+  - Available on: http://localhost:8080
+- [Dashboards](dashboards)
+  - Visualizes the data from the `orders` table, showing the number of orders and the revenue that the business is making
+  - Available on: http://localhost:8501
+  
+- [Mysql](docker/mysql)
+  - Stores users and products data
+  - Available on: localhost:3306
+    - user: mysqluser
+    - password: mysqlpw
+- [Pinot](docker/pinot)
+  - Consumes orders from the `orders` topic and ingests them into the `orders` table for real time analysis
+  - Available on: http://localhost:9000
+  
+- [Kafka](docker/kafka)
+  - Available on: localhost:29092
+- [Zookeeper](docker/zookeeper)
+  - Used for Kafka and Pinot coordination
+  - Available on: localhost:2181
+- [Debezium](docker/debezium)
+  - Captures changes from the `users` and `products` tables
+  - Available on: localhost:8083
+
+## Running for the first time
+Before executing `doker compose` for the first time, you need to build `pizzashop` docker image:
+```sh
+cd app/pizzashop-pinot &&  
+sdk use java 17.0.8-amzn &&
+./mvnw package &&
+docker build -f src/main/docker/Dockerfile.jvm -t quarkus/pizzashop-jvm .
+```
+  
+Running manually
 ```sh
 docker compose -f compose.yaml -f compose-pinot.yaml down --volumes
 docker compose -f compose.yaml -f compose-pinot.yaml up
@@ -204,11 +268,3 @@ cd dashboards
 docker build --tag streamlit .
 docker run -p 8501:8501 streamlit
 ```
-### Dashboards
-Dashboards are managed by the [dashboards](https://www.notion.so/gelerion/dashboards) service.
-  
-![Screenshot](images/basic_dashboard.png)
-  
-Links:
-- Pinot UI: http://localhost:9000
-- Dashboards UI: http://localhost:8501
