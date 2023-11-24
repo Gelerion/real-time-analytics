@@ -179,7 +179,6 @@ Example output:
   }
 }
 ```
-
 ## Building a Real-Time Analytics Dashboard
 The current architecture includes the [Order Service](https://www.notion.so/gelerion/orders-service), which simulates 
 users generating order events. These order events are produced to the Kafka topic named `orders`, consumed in real 
@@ -192,18 +191,20 @@ using the Streamlit framework.
 ![Screenshot](images/rta_dashbords_architecture.png)
   
 ### Running locally:
-Remove volumes
+Remove everything:
 ```sh
-docker compose -f compose.yaml \
+docker compose \
+      -f compose.yaml \
       -f compose-pinot-arm.yaml \
       -f compose-pizzashop.yaml \
       -f compose-dashboard.yaml \
       down --volumes
 ```
 
-Run:
+Run everything:
 ```sh
-docker compose -f compose.yaml \
+docker compose \
+      -f compose.yaml \
       -f compose-pinot-arm.yaml \
       -f compose-pizzashop.yaml \
       -f compose-dashboard.yaml \
@@ -218,13 +219,65 @@ Links:
 - Pinot UI: http://localhost:9000
 - Dashboards UI: http://localhost:8501
 
+## Capture Product changes using Debezium (CDC)
+We get a solid overview of the number of orders and the revenue that the business is making. What’s 
+missing is that they don’t know what’s happening at the product level.
+  
+The data about individual products is currently stored in the MySQL database, but we need to get it out of there and 
+into our real-time analytics architecture.
+  
+Change data capture describes the process of capturing the changes made to data in a source system and 
+then making them available to downstream/derived data systems. These changes could be new records, 
+changes to existing records, or deleted records.  
+`Debezium` is an open source, distributed platform for change data capture, written by RedHat. It 
+consists of a set of connectors that run in a Kafka Connect cluster. Each connector works with a 
+specific database, where it captures changes as they occur and then streams a record of each change 
+event to a topic in Kafka. These events are then read from the Kafka topic by consuming applications.
+
+![Screenshot](images/debezium.png)
+
+#### Setup Debezium
+```
+  debezium:
+    image: debezium/connect:2.4
+    
+  debezium_deploy:
+    image: debezium/connect:2.4
+    depends_on:
+      debezium: {condition: service_healthy}
+    volumes:
+      - ./docker/debezium/register_mysql.sh:/register_mysql.sh
+```
+After starting the Debezium container, we need to register the MySQL connector with the Kafka Connect cluster.
+  
+#### Querying state changes
+```
+kcat -C -b localhost:29092 -t mysql.pizzashop.products -c1 | jq '.payload'
+```
+Example output
+```
+{
+  "before": null,
+  "after": {
+    "id": 1,
+    "name": "Moroccan Spice Pasta Pizza - Veg",
+    "description": "A pizza with a combination of Harissa sauce & delicious pasta.",
+    "category": "veg pizzas",
+    "price": 335,
+    "image": "https://oreil.ly/LCGSv",
+    "created_at": "2022-12-05T16:56:02Z",
+    "updated_at": 1670259362000
+  }
+}  
+```
+                                                                                   
 ## Services
 - [Order Service](orders-service)
   - Simulates a pizza order service that receives orders from customers and sends them to the `orders` topic for processing
 - [Pizza Shop](app/pizzashop-pinot)
   - Queries the `orders` table and exposes an HTTP endpoint for querying the data
   - Available on: http://localhost:8080
-- [Dashboards](dashboards)
+- [Dashboards](dashboar`ds)
   - Visualizes the data from the `orders` table, showing the number of orders and the revenue that the business is making
   - Available on: http://localhost:8501
   

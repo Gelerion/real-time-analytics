@@ -53,25 +53,37 @@ services:
     networks:
       - rta
 
-#  debezium:
-#    image: debezium/connect:2.4
-#    hostname: debezium
-#    container_name: debezium
-#    environment:
-#      BOOTSTRAP_SERVERS: kafka:9092
-#      GROUP_ID: 1
-#      CONFIG_STORAGE_TOPIC: connect_configs
-#      OFFSET_STORAGE_TOPIC: connect_offsets
-#    ports:
-#      - 8083:8083
-#    healthcheck: { test: curl -f localhost:8083, interval: 1s, start_period: 120s }
-#    depends_on:
-#      kafka: { condition: service_healthy }
-#      mysql: { condition: service_healthy }
-#    networks:
-#      - rta
+  debezium:
+    image: debezium/connect:2.4
+    hostname: debezium
+    container_name: debezium
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+    ports:
+      - 8083:8083
+    healthcheck: { test: curl -f localhost:8083, interval: 1s, start_period: 120s }
+    depends_on:
+      kafka: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+    networks:
+      - rta
 
-# Services
+  debezium_deploy:
+    image: debezium/connect:2.4
+    depends_on:
+      debezium: {condition: service_healthy}
+    environment:
+      KAFKA_ADDR: kafka:9092
+    volumes:
+      - ./docker/debezium/register_mysql.sh:/register_mysql.sh
+    entrypoint: [bash, -c, /register_mysql.sh]
+    networks:
+      - rta
+
+  # Services
   orders-service:
     build: orders-service
     restart: unless-stopped
