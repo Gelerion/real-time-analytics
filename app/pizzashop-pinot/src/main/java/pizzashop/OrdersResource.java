@@ -10,13 +10,13 @@ import org.apache.pinot.client.ResultSet;
 import org.apache.pinot.client.ResultSetGroup;
 import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
-import pizzashop.models.OrdersSummary;
-import pizzashop.models.SummaryRow;
-import pizzashop.models.TimePeriod;
+import pizzashop.models.*;
 
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.jooq.impl.DSL.*;
 
@@ -101,6 +101,66 @@ public class OrdersResource {
         }
 
         return Response.ok(rows).build();
+    }
+
+    @GET
+    @Path("/popular")
+    public Response popular() {
+        String itemQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("product.name").as("product"),
+                        field("product.image").as("image"),
+                        field("distinctcount(orderId)").as("orders"),
+                        sum(field("orderItem.quantity").coerce(Long.class)).as("quantity")
+                )
+                .from("order_items_enriched")
+                .where(field("ts").greaterThan(field("ago('PT1M')")))
+                .groupBy(field("product"), field("image"))
+                .orderBy(field("count(*)").desc())
+                .limit(DSL.inline(5))
+                .getSQL();
+
+        ResultSet itemsResult = runQuery(connection, itemQuery);
+
+        List<PopularItem> popularItems = new ArrayList<>();
+        for (int index = 0; index < itemsResult.getRowCount(); index++) {
+            popularItems.add(new PopularItem(
+                    itemsResult.getString(index, 0),
+                    itemsResult.getString(index, 1),
+                    itemsResult.getLong(index, 2),
+                    itemsResult.getDouble(index, 3)
+            ));
+        }
+
+        String categoryQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("product.category").as("category"),
+                        field("distinctcount(orderId)").as("orders"),
+                        sum(field("orderItem.quantity").coerce(Long.class)).as("quantity")
+                )
+                .from("order_items_enriched")
+                .where(field("ts").greaterThan(field("ago('PT1M')")))
+                .groupBy(field("category"))
+                .orderBy(field("count(*)").desc())
+                .limit(DSL.inline(5))
+                .getSQL();
+
+        ResultSet categoryResult = runQuery(connection, categoryQuery);
+
+        List<PopularCategory> popularCategories = new ArrayList<>();
+        for (int index = 0; index < categoryResult.getRowCount(); index++) {
+            popularCategories.add(new PopularCategory(
+                    categoryResult.getString(index, 0),
+                    categoryResult.getLong(index, 1),
+                    categoryResult.getDouble(index, 2)
+            ));
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("items", popularItems);
+        result.put("categories", popularCategories);
+
+        return Response.ok(result).build();
     }
 
     private static ResultSet runQuery(Connection connection, String query) {

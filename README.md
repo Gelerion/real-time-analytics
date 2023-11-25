@@ -270,7 +270,49 @@ Example output
   }
 }  
 ```
-                                                                                   
+
+## Add most popular items and categories
+Although the `orders` stream doesn't currently contain detailed information about products, we have set up Debezium to 
+capture any changes to the MySQL `products` table and write them into the `products` stream. 
+We need to combine the `orders` stream and `products` streams by using a stream processor.
+We’ll put the new stream into Apache Pinot and update the dashboard with the top-selling products and categories.
+
+![Screenshot](images/kafka_streams.png)
+  
+To do so we need to create a `KTable` on top of the `products` stream and join with a `KStream` 
+on top of the `orders` stream.
+```
+KStream<String, Order> orders = builder.stream("orders")
+KTable<String, Product> products = builder.table("products")
+orders.join(products).to("enriched-order-items")
+```
+  
+Checkout the complete example:
+[EnrichedOrdersTopology.java](app/pizzashop-pinot/src/main/java/pizzashop/kafka/EnrichedOrdersTopology.java)
+
+Next, we need to add a new table and schema to Pinot that consumes the data from this new stream. 
+See the example: [enriched-orders](docker/pinot/config/orders_items_enriched/schema.json)
+  
+Finally, we need to update the dashboard to show the top-selling products and categories. 
+To do so, we need to update the `pizzashop` application to query the new table and expose the data via a new endpoint.
+```
+    @GET
+    @Path("/popular")
+    public Response popular() {
+        return Response.ok()
+                .entity(orderService.popular())
+                .build();
+    }
+```
+And update the [dashboard](dashboards/app.py) to query the new endpoint.
+```
+response = requests.get(f"{pizza_shop_service_api}/orders/popular").json()
+```
+
+### Dashboards with most popular items and categories
+![Screenshot](images/most_popular_items_dashboard.png)
+
+
 ## Services
 - [Order Service](orders-service)
   - Simulates a pizza order service that receives orders from customers and sends them to the `orders` topic for processing
@@ -314,7 +356,8 @@ docker compose -f compose.yaml -f compose-pinot.yaml down --volumes
 docker compose -f compose.yaml -f compose-pinot.yaml up
 cd app/pizzashop-pinot
 sdk use java 17.0.8-amzn 
-./mvnw compile quarkus:dev
+./mvnw clean package
+docker build -f src/main/docker/Dockerfile.jvm -t quarkus/pizzashop-jvm .
 cd ..
 cd ..
 cd dashboards

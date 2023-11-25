@@ -47,3 +47,17 @@ services:
       - pinot-controller
     networks:
       - rta
+
+  pinot-add-table-order-items-enriched:
+    image: apachepinot/pinot:0.11.0-arm64
+    container_name: "pinot-add-table-order-items-enriched"
+    volumes:
+      - ./docker/pinot/config:/config
+    command: "AddTable -schemaFile /config/orders_items_enriched/schema.json -tableConfigFile /config/orders_items_enriched/table.json -controllerHost pinot-controller -exec"
+    restart: on-failure
+    environment:
+      - "JAVA_OPTS=-Dpinot.admin.system.exit=true"
+    depends_on:
+      - pinot-controller
+    networks:
+      - rta

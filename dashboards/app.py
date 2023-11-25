@@ -1,16 +1,25 @@
+from turtle import width
 import streamlit as st
 import pandas as pd
-import time
+from pinotdb import connect
 from datetime import datetime
+import time
+import plotly.express as px
 import plotly.graph_objects as go
-# import plotly.express as px
-import requests
 import os
-# from pinotdb import connect
+from dateutil import parser
+import requests
 
 # pinot_host=os.environ.get("PINOT_SERVER", "pinot-broker")
 # pinot_port=os.environ.get("PINOT_PORT", 8099)
 # conn = connect(pinot_host, pinot_port)
+
+def path_to_image_html(path):
+    return '<img src="' + path + '" width="60" >'
+
+@st.cache
+def convert_df(input_df):
+    return input_df.to_html(escape=False, formatters=dict(image=path_to_image_html))
 
 pizzashop_host_port=os.environ.get("PIZZASHOP_SERVICE", "host.docker.internal:8080")
 
@@ -118,6 +127,31 @@ with col2:
                       margin=dict(l=0, r=0, t=40, b=0),)
     fig.update_yaxes(range=[0, df_ts["revenue"].max() * 1.1])
     st.plotly_chart(fig, use_container_width=True)
+
+
+response = requests.get(f"{pizza_shop_service_api}/orders/popular").json()
+
+left, right = st.columns(2)
+
+with left:
+    st.subheader("Most popular items")
+
+    popular_items = response["items"]
+    df = pd.DataFrame(popular_items)
+    df["quantityPerOrder"] = df["quantity"] / df["orders"]
+
+    html = convert_df(df)
+    st.markdown(html, unsafe_allow_html=True)
+
+with right:
+    st.subheader("Most popular categories")
+
+    popular_categories = response["categories"]
+    df = pd.DataFrame(popular_categories)
+    df["quantityPerOrder"] = df["quantity"] / df["orders"]
+
+    html = convert_df(df)
+    st.markdown(html, unsafe_allow_html=True)
 
 
 if auto_refresh:

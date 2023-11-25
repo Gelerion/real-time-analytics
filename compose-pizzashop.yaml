@@ -12,7 +12,13 @@ services:
       - "8080:8080"
     depends_on:
       - pinot-controller
+      - kafka
     environment:
       - PINOT_BROKER=pinot-broker:8099
+      - QUARKUS_KAFKA_STREAMS_BOOTSTRAP_SERVERS=kafka:9092
+      - ORDERS_TOPIC=orders
+      - PRODUCTS_TOPIC=mysql-connector-1.pizzashop.products
+      - ENRICHED_ORDER_ITEMS_TOPIC=enriched-order-items
+      - ENRICHED_ORDERS_TOPIC=enriched-orders
     networks:
       - rta
