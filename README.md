@@ -368,12 +368,48 @@ cd delivery-service
 docker build --tag delivery-service .
 ```
 
+#### Frontend
+See images/frontend
+
 ### TODO:
 Generators, move to quarkus streams
+- Explain endpoints
 - Delivery services listens to the `orders` topic and sends updates to the orders_statuses topic
 - Delivery services also update delivery coordinates with IN_TRANSIT status and long/lat coordinates
+- Pinot and upserts (option(skipUpsert=true)) -- using the skipUpsert=true flag to tell Pinot to return all the records associated with this id rather than just the latest one, which is what it would do by default
+example
+```
+select id, userId, status, price, ts
+from orders_enriched
+WHERE id = '816b9d84-9426-4055-9d48-54d11496bfbe'
+limit 10
+option(skipUpsert=true)
+```
+
+Time spend for each order (query Pinot) -- for orders currently in the kitchen
+```
+select status,
+	   min((now() - ts) / 1000) as min,
+	   percentile((now() - ts) / 1000, 50) AS percentile50,
+       avg((now() - ts) / 1000) as avg,
+	   percentile((now() - ts) / 1000, 75) AS percentile75,
+	   percentile((now() - ts) / 1000, 90) AS percentile90,
+	   percentile((now() - ts) / 1000, 90) AS percentile99,
+     max((now() - ts) / 1000) as max
+from orders_enriched
+WHERE status NOT IN ('DELIVERED', 'OUT_FOR_DELIVERY')
+group by status;
+```
+| status          | min    | percentile50 | avg                 | percentile75 | percentile90 | percentile99 | max      |
+|-----------------|--------|--------------|---------------------|--------------|--------------|--------------|----------|
+| ORDER_CONFIRMED | 18.723 | 22.935       | 23.13713333333334   | 25.452       | 27.114       | 29.13        | 29.719   |
+| BEING_COOKED    | 18.752 | 38.39        | 39.55397026604069   | 47.026       | 60.505       | 72.908       | 77.366   |
+| BEING_PREPARED  | 18.715 | 25.705       | 25.971310344827568  | 29.753       | 32.114       | 35.277       | 35.526   |
+| PLACED_ORDER    | 14.544 | 25.708       | 26.718140921409194  | 32.268       | 38.268       | 46.308       | 47.852   |
   
+
 Geo formula to approximate delivery time:
+
 ```
         dist = geopy.distance.distance(shop_location, delivery_location).meters
         minutes_to_deliver = (dist / (driver_km_per_hour * 1000)) * 60

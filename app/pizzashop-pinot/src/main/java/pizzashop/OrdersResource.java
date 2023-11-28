@@ -232,6 +232,44 @@ public class OrdersResource {
         return Response.ok(response).build();
     }
 
+    @GET
+    @Path("/statuses")
+    public Response statuses() {
+        String query = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("status"),
+                        min(field("(now() - ts) / 1000")),
+                        field("percentile((now() - ts) / 1000, 50)"),
+                        avg(field("(now() - ts) / 1000").coerce(Long.class)),
+                        field("percentile((now() - ts) / 1000, 75)"),
+                        field("percentile((now() - ts) / 1000, 90)"),
+                        field("percentile((now() - ts) / 1000, 99)"),
+                        max(field("(now() - ts) / 1000"))
+                )
+                .from("orders_enriched")
+                .where(field("status NOT IN ('DELIVERED', 'OUT_FOR_DELIVERY')").coerce(Boolean.class))
+                .groupBy(field("status"))
+                .getSQL();
+
+        ResultSet resultSet = runQuery(connection, query);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int index = 0; index < resultSet.getRowCount(); index++) {
+            rows.add(Map.of(
+                    "status", resultSet.getString(index, 0),
+                    "min", resultSet.getDouble(index, 1),
+                    "percentile50", resultSet.getDouble(index, 2),
+                    "avg", resultSet.getDouble(index, 3),
+                    "percentile75", resultSet.getDouble(index, 4),
+                    "percentile90", resultSet.getDouble(index, 5),
+                    "percentile99", resultSet.getDouble(index, 6),
+                    "max", resultSet.getDouble(index, 7)
+            ));
+        }
+
+        return Response.ok(rows).build();
+    }
+
     private static ResultSet runQuery(Connection connection, String query) {
         System.out.println("Running the following query: " + query);
         ResultSetGroup resultSetGroup = connection.execute(query);
