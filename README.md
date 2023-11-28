@@ -363,4 +363,18 @@ cd ..
 cd dashboards
 docker build --tag streamlit .
 docker run -p 8501:8501 streamlit
+cd ..
+cd delivery-service
+docker build --tag delivery-service .
+```
+
+### TODO:
+Generators, move to quarkus streams
+- Delivery services listens to the `orders` topic and sends updates to the orders_statuses topic
+- Delivery services also update delivery coordinates with IN_TRANSIT status and long/lat coordinates
+  
+Geo formula to approximate delivery time:
+```
+        dist = geopy.distance.distance(shop_location, delivery_location).meters
+        minutes_to_deliver = (dist / (driver_km_per_hour * 1000)) * 60
 ```

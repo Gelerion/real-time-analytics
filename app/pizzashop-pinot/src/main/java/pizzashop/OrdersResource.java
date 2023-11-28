@@ -3,6 +3,7 @@ package pizzashop;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
 import org.apache.pinot.client.Connection;
 import org.apache.pinot.client.ConnectionFactory;
@@ -17,6 +18,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.jooq.impl.DSL.*;
 
@@ -161,6 +164,72 @@ public class OrdersResource {
         result.put("categories", popularCategories);
 
         return Response.ok(result).build();
+    }
+
+    @GET
+    @Path("/{orderId}")
+    public Response order(@PathParam("orderId") String orderId) {
+        String userQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(field("userId"))
+                .from("orders")
+                .where(field("id").eq(field("'" + orderId + "'")))
+                .getSQL();
+
+        ResultSet userResultSet = runQuery(connection, userQuery);
+
+        Stream<Map<String, Object>> userInfo = IntStream.range(0, userResultSet.getRowCount())
+                .mapToObj(index -> Map.of(
+                        "id", userResultSet.getString(index, 0)
+                ));
+
+        String productsQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("product.name").as("product"),
+                        field("product.price").as("price"),
+                        field("product.image").as("image"),
+                        field("orderItem.quantity").as("quantity")
+                )
+                .from("order_items_enriched")
+                .where(field("orderId").eq(field("'" + orderId + "'")))
+                .getSQL();
+
+        ResultSet productsResultSet = runQuery(connection, productsQuery);
+
+        Stream<Map<String, Object>> products = IntStream.range(0, productsResultSet.getRowCount())
+                .mapToObj(index -> Map.of(
+                        "product", productsResultSet.getString(index, 0),
+                        "price", productsResultSet.getDouble(index, 1),
+                        "image", productsResultSet.getString(index, 2),
+                        "quantity", productsResultSet.getLong(index, 3)
+                ));
+
+        String statusesQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("ToDateTime(ts, 'YYYY-MM-dd HH:mm:ss')").as("ts"),
+                        field("status"),
+                        field("userId").as("image")
+                )
+                .from("orders_enriched")
+                .where(field("id").eq(field("'" + orderId + "'")))
+                .orderBy(field("ts").desc())
+                .option("option(skipUpsert=true)")
+                .getSQL();
+
+        ResultSet statusesResultSet = runQuery(connection, statusesQuery);
+
+        Stream<Map<String, Object>> statuses = IntStream.range(0, statusesResultSet.getRowCount())
+                .mapToObj(index -> Map.of(
+                        "timestamp", statusesResultSet.getString(index, 0),
+                        "status", statusesResultSet.getString(index, 1)
+                ));
+
+        Map<String, Object> response = new HashMap<>(Map.of(
+                "user", userInfo,
+                "products", products,
+                "statuses", statuses
+        ));
+
+        return Response.ok(response).build();
     }
 
     private static ResultSet runQuery(Connection connection, String query) {

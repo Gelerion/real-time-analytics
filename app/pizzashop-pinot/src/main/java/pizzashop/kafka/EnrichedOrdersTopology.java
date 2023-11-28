@@ -8,14 +8,17 @@ import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.kstream.*;
+import pizzashop.kafka.model.EnrichedOrder;
 import pizzashop.kafka.model.HydratedOrderItem;
 import pizzashop.kafka.model.OrderItemWithContext;
+import pizzashop.kafka.model.OrderStatus;
 import pizzashop.kafka.serde.JsonDeserializer;
 import pizzashop.kafka.serde.JsonSerializer;
 import pizzashop.kafka.serde.OrderItemWithContextSerde;
 import pizzashop.models.Order;
 import pizzashop.models.Product;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Properties;
@@ -42,6 +45,12 @@ public class EnrichedOrdersTopology {
 
         final Serde<HydratedOrderItem> hydratedOrderItemsSerde = Serdes.serdeFrom(new JsonSerializer<>(),
                 new JsonDeserializer<>(HydratedOrderItem.class));
+
+        final Serde<OrderStatus> orderStatusSerde = Serdes.serdeFrom(new JsonSerializer<>(),
+                new JsonDeserializer<>(OrderStatus.class));
+
+        final Serde<EnrichedOrder> enrichedOrdersSerde = Serdes.serdeFrom(new JsonSerializer<>(),
+                new JsonDeserializer<>(EnrichedOrder.class));
 
         StreamsBuilder builder = new StreamsBuilder();
 
@@ -75,6 +84,46 @@ public class EnrichedOrdersTopology {
         }
          */
         KTable<String, Product> products = builder.table(productsTopic, Consumed.with(productKeySerde, productSerde));
+
+        /*
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:27:35.739917",
+          "status": "PLACED_ORDER"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:30:07.739917",
+          "status": "ORDER_CONFIRMED"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:30:20.739917",
+          "status": "BEING_PREPARED"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:30:30.739917",
+          "status": "BEING_COOKED"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:30:30.739917",
+          "status": "OUT_FOR_DELIVERY"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:30:42.739917",
+          "status": "ARRIVING_AT_DOOR"
+        }
+        {
+          "id": "ed3fe5bc-2e2e-49c3-a2f3-367b4dd80000",
+          "updatedAt": "2022-10-17T13:31:02.739917",
+          "status": "DELIVERED"
+        }
+         */
+        KStream<String, OrderStatus> orderStatuses = builder.stream(orderStatusesTopic,
+                Consumed.with(Serdes.String(), orderStatusSerde));
 
         //flatten an array of order items
         KStream<String, OrderItemWithContext> orderItems = orders.flatMap((key, order) -> {
@@ -112,6 +161,26 @@ public class EnrichedOrdersTopology {
                                 new HydratedOrderItem(orderItem.orderId, orderItem.createdAt, product, orderItem.orderItem),
                         Joined.with(Serdes.String(), orderItemWithContextSerde, productSerde))
         .to(enrichedOrderItemsTopic, Produced.with(Serdes.String(), hydratedOrderItemsSerde));
+
+        /*
+        Output example:
+        {"userId":"817","createdAt":"2022-10-17T13:27:35.739917", "status":"PLACED_ORDER","price":4259}
+        {"userId":"817","createdAt":"2022-10-17T13:30:07.739917", "status":"ORDER_CONFIRMED","price":4259}
+        {"userId":"817","createdAt":"2022-10-17T13:30:20.739917", "status":"BEING_PREPARED","price":4259}
+         */
+        orders.join(orderStatuses,
+                (order, orderStatus) -> {
+                    EnrichedOrder enrichedOrder = new EnrichedOrder();
+                    enrichedOrder.id = order.id;
+                    enrichedOrder.items = order.items;
+                    enrichedOrder.userId = order.userId;
+                    enrichedOrder.status = orderStatus.status;
+                    enrichedOrder.createdAt = orderStatus.updatedAt;
+                    enrichedOrder.price = order.price;
+                    return enrichedOrder;
+                },
+                JoinWindows.ofTimeDifferenceAndGrace(Duration.ofHours(2), Duration.ofHours(4))
+                ).to(enrichedOrdersTopic, Produced.with(Serdes.String(), enrichedOrdersSerde));
 
         final Properties props = new Properties();
 

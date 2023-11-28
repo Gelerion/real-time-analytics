@@ -98,6 +98,20 @@ services:
     networks:
       - rta
 
+  delivery-service:
+    build: delivery-service
+    restart: unless-stopped
+    container_name: delivery-service
+    depends_on:
+      - mysql
+      - kafka
+    environment:
+      - MYSQL_SERVER=mysql
+      - KAFKA_BROKER_HOSTNAME=kafka
+      - KAFKA_BROKER_PORT=9092
+    networks:
+      - rta
+
 networks:
   rta:
     name: rta
