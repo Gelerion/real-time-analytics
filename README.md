@@ -465,3 +465,5 @@ WHERE ST_Contains(
       ) = 1
 AND status = 'IN_TRANSIT'
 ```
+
+https://github.com/mneedham/real-time-analytics-book/tree/main
