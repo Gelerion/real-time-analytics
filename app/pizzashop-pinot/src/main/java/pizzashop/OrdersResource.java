@@ -166,6 +166,42 @@ public class OrdersResource {
         return Response.ok(result).build();
     }
 
+    /*
+    Response example:
+    {
+      "user": {
+        "deliveryLat": 12.98727479,
+        "deliveryLon": 77.7178702,
+        "id": 3765,
+      },
+      "deliveryStatus": {
+        "lat": 12.979204959662848,
+        "lon": 77.60707835711453,
+        "timestamp": "2022-10-26 14:00:39"
+      },
+      "products": [
+        {
+          "image": "https://oreil.ly/vEv1e",
+          "price": 175,
+          "product": "Non Veg Loaded",
+          "quantity": 2
+        },
+        {
+          "image": "https://oreil.ly/ms7dp",
+          "price": 385,
+          "product": "Veggie Paradise",
+          "quantity": 2
+        }
+      ],
+      "statuses": [
+        {"status": "OUT_FOR_DELIVERY", "timestamp": "2022-10-26 14:00:05"},
+        {"status": "BEING_COOKED", "timestamp": "2022-10-26 13:59:16"},
+        {"status": "BEING_PREPARED", "timestamp": "2022-10-26 13:59:02"},
+        {"status": "ORDER_CONFIRMED", "timestamp": "2022-10-26 13:58:50"},
+        {"status": "PLACED_ORDER", "timestamp": "2022-10-26 13:58:28"}
+      ],
+    }
+     */
     @GET
     @Path("/{orderId}")
     public Response order(@PathParam("orderId") String orderId) {
@@ -223,13 +259,67 @@ public class OrdersResource {
                         "status", statusesResultSet.getString(index, 1)
                 ));
 
+        String deliveryStatusQuery = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("ToDateTime(ts, 'YYYY-MM-dd HH:mm:ss')").as("ts"),
+                        field("deliveryLat"),
+                        field("deliveryLon")
+                )
+                .from("delivery_statuses")
+                .where(field("id").eq(field("'" + orderId + "'")))
+                .getSQL();
+
+        ResultSet deliveryStatusResultSet = runQuery(connection, deliveryStatusQuery);
+
+        Stream<Map<String, Object>> deliveryStatus = IntStream.range(0,
+                        deliveryStatusResultSet.getRowCount())
+                .mapToObj(index -> Map.of(
+                        "timestamp", deliveryStatusResultSet.getString(index, 0),
+                        "lat", deliveryStatusResultSet.getDouble(index, 1),
+                        "lon", deliveryStatusResultSet.getDouble(index, 2)
+                ));
+
         Map<String, Object> response = new HashMap<>(Map.of(
                 "user", userInfo,
                 "products", products,
                 "statuses", statuses
         ));
 
+        deliveryStatus.findFirst().ifPresent(stringObjectMap -> response.put("deliveryStatus", stringObjectMap));
+
         return Response.ok(response).build();
+    }
+
+    @GET
+    @Path("/delayed/{area}")
+    public Response Delayed(@PathParam("area") String area) {
+        String query = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("ts"),
+                        field("id"),
+                        field("deliveryLat"),
+                        field("deliveryLon")
+                )
+                .from("delivery_statuses")
+                .where(field("status").eq(field("'" + "IN_TRANSIT" + "'")))
+                .and(field("ST_Contains(ST_GeomFromText('" + area + "'), toGeometry(location)) = 1")
+                        .coerce(Boolean.class))
+                .orderBy(field("ts"))
+                .getSQL();
+
+        ResultSet resultSet = runQuery(connection, query);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int index = 0; index < resultSet.getRowCount(); index++) {
+            rows.add(Map.of(
+                    "ts", resultSet.getString(index, 0),
+                    "id", resultSet.getString(index, 1),
+                    "deliveryLat", resultSet.getDouble(index, 2),
+                    "deliveryLon", resultSet.getDouble(index, 3)
+            ));
+        }
+
+        return Response.ok(rows).build();
     }
 
     @GET
@@ -269,6 +359,41 @@ public class OrdersResource {
 
         return Response.ok(rows).build();
     }
+
+    @GET
+    @Path("/stuck/{orderStatus}/{stuckTimeInMillis}")
+    public Response stuckOrders(
+            @PathParam("orderStatus") String orderStatus,
+            @PathParam("stuckTimeInMillis") Long stuckTimeInMillis
+    ) {
+        String query = DSL.using(SQLDialect.POSTGRES)
+                .select(
+                        field("id"),
+                        field("price"),
+                        field("ts"),
+                        field("(now() - ts) / 1000")
+                )
+                .from("orders_enriched")
+                .where(field("status").eq(field("'" + orderStatus + "'")))
+                .and(field("(now() - ts) > " + stuckTimeInMillis).coerce(Boolean.class))
+                .orderBy(field("ts"))
+                .getSQL();
+
+        ResultSet resultSet = runQuery(connection, query);
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (int index = 0; index < resultSet.getRowCount(); index++) {
+            rows.add(Map.of(
+                    "id", resultSet.getString(index, 0),
+                    "price", resultSet.getDouble(index, 1),
+                    "ts", resultSet.getString(index, 2),
+                    "timeInStatus", resultSet.getDouble(index, 3)
+            ));
+        }
+
+        return Response.ok(rows).build();
+    }
+
 
     private static ResultSet runQuery(Connection connection, String query) {
         System.out.println("Running the following query: " + query);

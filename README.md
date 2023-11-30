@@ -374,8 +374,9 @@ See images/frontend
 ### TODO:
 Generators, move to quarkus streams
 - Explain endpoints
-- Delivery services listens to the `orders` topic and sends updates to the orders_statuses topic
+- Delivery services listens to the `orders` topic and sends updates to the `orders_statuses` topic
 - Delivery services also update delivery coordinates with IN_TRANSIT status and long/lat coordinates
+  - deliveryStatuses topic
 - Pinot and upserts (option(skipUpsert=true)) -- using the skipUpsert=true flag to tell Pinot to return all the records associated with this id rather than just the latest one, which is what it would do by default
 example
 ```
@@ -413,4 +414,54 @@ Geo formula to approximate delivery time:
 ```
         dist = geopy.distance.distance(shop_location, delivery_location).meters
         minutes_to_deliver = (dist / (driver_km_per_hour * 1000)) * 60
+```
+  
+Geospatial in Pinot
+The transformation function uses the stPoint function, which has the following signature: `STPOINT(x, y, isGeography)` 
+This function returns a geography point object with the provided coordinate values  
+The location column also has a geospatial index:
+```
+"fieldConfigList": [
+   {
+     "name": "location",
+     "encodingType":"RAW",
+     "indexType":"H3",
+     "properties": {"resolutions": "5"}
+   }
+ ]
+```
+Geospatial indexing enables efficient querying of location-based data, such as latitude and longitude coordinates or 
+geographical shapes. Apache Pinot’s geospatial index is based on Uber’s Hexagonal Hierarchical Spatial Index (H3) library.
+This library provides hexagon-based hierarchical gridding. Indexing a point means that the point is translated to 
+a geoId, which corresponds to a hexagon. Its neighbors in H3 can be approximated by a ring of hexagons. Direct neighbors 
+have a distance of 1, their neighbors are at a distance of 2, and so on.
+![Screenshot](images/hexagons_index.png)
+
+ #### How many delivers around  within a particular virtual perimeter around a real area
+Example of getting long, lat coordinates for a particular order:
+```
+select deliveryLat, deliveryLon, id, ts
+from delivery_statuses
+WHERE id = '816b9d84-9426-4055-9d48-54d11496bfbe'
+limit 10
+option(skipUpsert=true)
+```
+
+We can also run a query to see how many deliveries are within a particular virtual perimeter around a real area, known 
+as a `geofence`. Perhaps the operations team has information that there’s been an accident in a certain part of the city
+and wants to see how many drivers are potentially stuck. An example query is shown here:
+```
+select count(*)
+from delivery_statuses
+WHERE ST_Contains(
+         ST_GeomFromText('POLYGON((
+           77.6110752789269 12.967434625129457,
+           77.61949358844464 12.972227849153782,
+           77.62067778131079 12.966846580403327,
+           77.61861133323839 12.96537193573893,
+           77.61507457042217 12.965872682158846,
+           77.6110752789269 12.967434625129457))'),
+	 toGeometry(location)
+      ) = 1
+AND status = 'IN_TRANSIT'
 ```
